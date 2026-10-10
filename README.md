@@ -45,7 +45,7 @@ python -m unittest discover -s tests -v
 Legal templates are starting points, not legal advice. Users should have completed
 documents reviewed by qualified counsel.
 
-## Mutual NDA creator prototype
+## Unified Mutual NDA web app
 
 Run the web prototype locally:
 
@@ -54,6 +54,13 @@ python -m pip install -e .
 python -m prelegal.web --database prelegal.db --port 8000
 ```
 
-Then open <http://127.0.0.1:8000>. Enter the parties and agreement details to create a
-preview backed by the versioned template database. The completed document can be
-downloaded as a Markdown file. The prototype uses only Python's standard library.
+Then open <http://127.0.0.1:8000>. The workspace combines the versioned template
+database and Mutual NDA creator in one application. It supports:
+
+- creating agreements from validated party and deal details;
+- safe, formatted document previews;
+- editing with immutable revision history and stale-edit protection;
+- recent-document navigation; and
+- Markdown, standalone HTML, and print/PDF output.
+
+The application uses only Python's standard library and binds to localhost by default.

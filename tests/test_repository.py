@@ -70,6 +70,11 @@ class TemplateRepositoryTests(unittest.TestCase):
                 original.id, "stale edit", expected_revision=1
             )
 
+        summaries = self.repository.list_documents()
+        self.assertEqual([original.id], [summary.id for summary in summaries])
+        self.assertEqual(2, summaries[0].revision)
+        self.assertEqual([2, 1], self.repository.list_revisions(original.id))
+
     def test_published_template_versions_are_immutable(self):
         with closing(sqlite3.connect(self.database)) as connection, connection:
             with self.assertRaisesRegex(sqlite3.IntegrityError, "immutable"):

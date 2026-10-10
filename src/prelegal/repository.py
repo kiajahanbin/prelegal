@@ -45,6 +45,16 @@ class Document:
     values: dict[str, str]
 
 
+@dataclass(frozen=True)
+class DocumentSummary:
+    id: str
+    title: str
+    template_slug: str
+    template_version: str
+    revision: int
+    updated_at: str
+
+
 class TemplateRepository:
     """Manage immutable templates and independently editable user documents."""
 
@@ -213,6 +223,45 @@ class TemplateRepository:
             template_version=row["version"], revision=row["revision"],
             content=row["content"], values=json.loads(row["values_json"]),
         )
+
+    def list_documents(self, limit: int = 20) -> list[DocumentSummary]:
+        """Return recently updated documents without loading their full content."""
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                """SELECT d.id, d.title, d.current_revision, d.updated_at,
+                          t.slug, v.version
+                   FROM documents d
+                   JOIN template_versions v ON v.id = d.template_version_id
+                   JOIN legal_templates t ON t.id = v.template_id
+                   ORDER BY d.updated_at DESC, d.id DESC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [
+            DocumentSummary(
+                id=row["id"],
+                title=row["title"],
+                template_slug=row["slug"],
+                template_version=row["version"],
+                revision=row["current_revision"],
+                updated_at=row["updated_at"],
+            )
+            for row in rows
+        ]
+
+    def list_revisions(self, document_id: str) -> list[int]:
+        """List a document's available revision numbers, newest first."""
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                """SELECT revision FROM document_revisions
+                   WHERE document_id = ? ORDER BY revision DESC""",
+                (document_id,),
+            ).fetchall()
+        if not rows:
+            raise KeyError(f"unknown document: {document_id}")
+        return [row["revision"] for row in rows]
 
     @staticmethod
     def _render(
