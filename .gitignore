@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 !.env.*.example
+opencode.json
 
 # Python
 __pycache__/
