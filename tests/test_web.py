@@ -29,11 +29,12 @@ class MutualNDAApplicationTests(unittest.TestCase):
     def tearDown(self):
         self.temporary_directory.cleanup()
 
-    def request(self, method="GET", path="/", values=None):
+    def request(self, method="GET", path="/", values=None, query=""):
         body = urlencode(values or {}).encode()
         environ = {
             "REQUEST_METHOD": method,
             "PATH_INFO": path,
+            "QUERY_STRING": query,
             "CONTENT_LENGTH": str(len(body)),
             "wsgi.input": BytesIO(body),
         }
@@ -61,6 +62,8 @@ class MutualNDAApplicationTests(unittest.TestCase):
         self.assertTrue(response["status"].startswith("201"))
         page = response["body"].decode()
         self.assertIn("Acme &amp; Sons, Inc.", page)
+        self.assertIn("<h1>Mutual Non-Disclosure Agreement</h1>", page)
+        self.assertNotIn("<pre>", page)
         match = re.search(r'href="(/documents/[^\"]+/download)"', page)
         self.assertIsNotNone(match)
 
@@ -69,6 +72,46 @@ class MutualNDAApplicationTests(unittest.TestCase):
         self.assertEqual("text/markdown; charset=utf-8", download["headers"]["Content-Type"])
         self.assertIn("Acme & Sons, Inc.", download["body"].decode())
         self.assertIn("attachment", download["headers"]["Content-Disposition"])
+
+        document_path = match.group(1).removesuffix("/download")
+        html_download = self.request("GET", document_path + "/download.html")
+        self.assertEqual("text/html; charset=utf-8", html_download["headers"]["Content-Type"])
+        self.assertIn("mutual-nda.html", html_download["headers"]["Content-Disposition"])
+
+        home = self.request()
+        self.assertIn("Acme &amp; Sons, Inc.", home["body"].decode())
+
+    def test_document_can_be_edited_with_revision_history(self):
+        created = self.request("POST", "/documents", VALUES)
+        match = re.search(r'href="(/documents/[^\"]+)/download"', created["body"].decode())
+        document_path = match.group(1)
+
+        updated = self.request(
+            "POST",
+            document_path,
+            {"expected_revision": "1", "content": "# Revised NDA\n\nCustom terms."},
+        )
+        self.assertTrue(updated["status"].startswith("200"))
+        self.assertIn("Revision 2 saved", updated["body"].decode())
+        self.assertIn("<h1>Revised NDA</h1>", updated["body"].decode())
+
+        old_revision = self.request("GET", document_path, query="revision=1")
+        self.assertIn("Viewing historical revision 1", old_revision["body"].decode())
+        self.assertNotIn("Save new revision", old_revision["body"].decode())
+
+        stale = self.request(
+            "POST",
+            document_path,
+            {"expected_revision": "1", "content": "Stale overwrite"},
+        )
+        self.assertTrue(stale["status"].startswith("409"))
+        self.assertIn("found 2", stale["body"].decode())
+
+        empty = self.request(
+            "POST", document_path, {"expected_revision": "2", "content": ""}
+        )
+        self.assertTrue(empty["status"].startswith("422"))
+        self.assertIn("cannot be empty", empty["body"].decode())
 
     def test_invalid_submission_returns_form_with_error_and_preserves_values(self):
         incomplete = dict(VALUES)
